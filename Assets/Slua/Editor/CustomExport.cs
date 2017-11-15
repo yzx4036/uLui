@@ -168,8 +168,10 @@ namespace SLua
 			    "ClusterInput",
 				"Motion",
                 "UnityEngine.UI.ReflectionMethodsCache",
-                "Collections.NativeLeakDetection",
-                "UnityEngine.Light",
+				"NativeLeakDetection",
+				"NativeLeakDetectionMode",
+				"WWWAudioExtensions",
+                "UnityEngine.Experimental",
             };
         }
     }

@@ -1087,7 +1087,8 @@ end
         {
 #if !LUA_5_3 && !SLUA_STANDALONE
             // lua implemented valuetype isn't faster than raw under non-jit.
-			LuaState.get(l).doString(script,"ValueTypeScript");
+            LuaState ls = LuaState.get(l);
+            ls.doString(script, "ValueTypeScript");
 #endif
         }
     }

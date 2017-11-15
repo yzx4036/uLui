@@ -31,6 +31,10 @@ function testArray()
 	
 	HelloWorld.int16Array(a)
 	HelloWorld.int16Array({1,2,3,4})
+	HelloWorld.byteArrayTest()
+
+	local rtarr = {c}
+	HelloWorld.transformArray(rtarr)
 end
 
 function testNullable()
@@ -72,6 +76,9 @@ function main()
 
 	-- test override function
 	HelloWorld.AFuncByDouble(1);
+
+	-- test negetive value
+	assert(HelloWorld.getNegInt()==-1)
 
 	-- test custom component
 	local x=UnityEngine.GameObject("OoOo")
@@ -139,10 +146,14 @@ function main()
 	ba:WriteByte(11)
 	ba:WriteByte(22)
 	ba:WriteVarInt(1024)
+	ba:WriteShort(5656)
+	ba:WriteNum(3.1415)
 	ba.Position=0
 	assert(ba:ReadByte()==11)
 	assert(ba:ReadByte()==22)
 	assert(ba:ReadVarInt()==1024)
+	assert(ba:ReadShort()==5656)
+	assert(ba:ReadDouble()==3.1415)
 
 
 	-- get out parameter
@@ -204,7 +215,7 @@ function main()
 		Yield(WaitForSeconds(2))
 		print "coroutine WaitForSeconds 2"
 
-		local www = WWW("http://www.sineysoft.com")
+		local www = WWW("http://www.baidu.com")
 		Yield(www)
 		print(#Slua.ToString(www.bytes))
 
@@ -240,6 +251,8 @@ function main()
 	h:func7(abc)
 	h.cc = Color32(255,0,0,255)
 	print("Hellor world color",h.cc)
+
+    HelloWorld.setObjs({{1,2},{3,4},{5,6}})
 end
 
 function abc()

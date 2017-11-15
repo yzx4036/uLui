@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+﻿﻿using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 using SLua;
@@ -146,6 +146,11 @@ public class HelloWorld
 		}
 		iter.Dispose();
 
+	}
+
+	static public int getNegInt() 
+	{
+		return -1;
 	}
 
 	static public LuaTable getv()
@@ -328,11 +333,30 @@ public class HelloWorld
 		}
 	}
 
-	internal int b;
-
     public void func8(List<int> result)
     {
         result.Add(1);
+    }
+
+    public static void byteArrayTest()
+    {
+        var ba = new ByteArray();
+        ba.WriteInt64(1L);
+        ba.WriteInt64(2L);
+        ba.WriteInt64(1024L);
+        ba.Position = 0;
+        Assert.IsTrue(ba.ReadInt64() == 1L);
+        Assert.IsTrue(ba.ReadInt64() == 2L);
+        Assert.IsTrue(ba.ReadInt64()==1024L);
+    }
+
+    public static void transformArray(Transform[] arr)
+    {
+        Debug.Log("transformArray success.");
+    }
+
+    public static void setObjs(object[] objs) {
+        
     }
 }
 

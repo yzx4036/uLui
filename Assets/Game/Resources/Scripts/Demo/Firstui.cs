@@ -48,7 +48,7 @@ public class Firstui : MonoBehaviour
         {
             bool isBlock = panel_root.GetComponent<CanvasGroup>().blocksRaycasts;
             panel_root.GetComponent<CanvasGroup>().blocksRaycasts = !isBlock;
-            Text textComp = btn_guide.transform.FindChild("Text").gameObject.GetComponent<Text>();
+            Text textComp = btn_guide.transform.Find("Text").gameObject.GetComponent<Text>();
             textComp.text = isBlock ? "关闭遮罩" : "开启遮罩";
         });
 
@@ -94,7 +94,7 @@ public class Firstui : MonoBehaviour
         pageView.cellsCount = 14;
         pageView.SetCellHandle((int idx,GameObject obj) =>
         {
-            obj.transform.FindChild("Text").GetComponent<Text>().text = idx.ToString();
+            obj.transform.Find("Text").GetComponent<Text>().text = idx.ToString();
         });
         pageView.onPageChangedHandler = (int pageIdx) =>
         {

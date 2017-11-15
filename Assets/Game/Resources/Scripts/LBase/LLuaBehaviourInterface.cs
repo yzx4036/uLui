@@ -737,7 +737,7 @@ public class LLuaBehaviourInterface
 		try
 		{
 			// The lua file return the table itself.
-			object cChunk = Game.GetLuaSvr().luaState.doFile(strFile);
+			object cChunk =LuaSvr.mainState.doFile(strFile);
 			if ((null == cChunk) || !(cChunk is LuaTable))
 			{
 				return false;
@@ -772,7 +772,7 @@ public class LLuaBehaviourInterface
 		try
 		{
 			// Get class first.
-			LuaTable cClsTable = (LuaTable)Game.GetLuaSvr().luaState[strClassName];
+			LuaTable cClsTable = (LuaTable)LuaSvr.mainState[strClassName];
 			if (null == cClsTable)
 			{
 				return false;

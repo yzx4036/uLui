@@ -18,14 +18,15 @@ public class Game : MonoBehaviour
 
         if (_l == null)
         {
-			if (LGameConfig.GetInstance().isDebug)
-            {
-				LuaState.loaderDelegate = loadFileWithSuffix;
-            }else
-            {
-				LuaState.loaderDelegate = loadLuaWithAb;
-            }
             _l = new LuaSvr();
+            if (LGameConfig.GetInstance().isDebug)
+            {
+                LuaSvr.mainState.loaderDelegate = loadFileWithSuffix;
+            }
+            else
+            {
+                LuaSvr.mainState.loaderDelegate = loadLuaWithAb;
+            }
             _l.init(tick, complete);
         }
         else
