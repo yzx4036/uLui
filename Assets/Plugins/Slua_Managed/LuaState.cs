@@ -19,6 +19,7 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
+//#define LUA_DEBUG
 
 
 
@@ -28,6 +29,9 @@ namespace SLua
     using System.Collections.Generic;
     using System.Collections;
     using System.Text;
+#if LUA_DEBUG
+    using System.Security.Cryptography;
+#endif
 #if !SLUA_STANDALONE
     using UnityEngine;
 #else
@@ -84,15 +88,15 @@ namespace SLua
             GC.SuppressFinalize(this);
         }
 
+        static void unref(IntPtr l, int r) {
+            LuaDLL.lua_unref(l, r);
+        }
+
         public virtual void Dispose(bool disposeManagedResources)
         {
             if (valueref != 0)
             {
-                LuaState.UnRefAction act = (IntPtr l, int r) =>
-                {
-                    LuaDLL.lua_unref(l, r);
-                };
-                state.gcRef(act, valueref);
+                state.gcRef(unref, valueref);
                 valueref = 0;
             }
         }
@@ -158,16 +162,16 @@ namespace SLua
         {
         }
 
+        static void unref(IntPtr l, int r) {
+            LuaObject.removeDelgate(l, r);
+            LuaDLL.lua_unref(l, r);
+        }
+
         public override void Dispose(bool disposeManagedResources)
         {
             if (valueref != 0)
             {
-                LuaState.UnRefAction act = (IntPtr l, int r) =>
-                {
-                    LuaObject.removeDelgate(l, r);
-                    LuaDLL.lua_unref(l, r);
-                };
-                state.gcRef(act, valueref);
+                state.gcRef(unref, valueref);
                 valueref = 0;
             }
 
@@ -443,7 +447,9 @@ namespace SLua
         IntPtr l_;
         int mainThread = 0;
         internal WeakDictionary<int, LuaDelegate> delgateMap = new WeakDictionary<int, LuaDelegate>();
-
+#if LUA_DEBUG
+        static Dictionary<string, string> debugStringMap = new Dictionary<string, string>();
+#endif
 		public int cachedDelegateCount{
 			get{
 				return this.delgateMap.AliveCount;
@@ -485,7 +491,7 @@ namespace SLua
 
         public int Top { get { return LuaDLL.lua_gettop(L); } }
 
-        public delegate byte[] LoaderDelegate(string fn);
+		public delegate byte[] LoaderDelegate(string fn, ref string absoluteFn);
         public delegate void OutputDelegate(string msg);
         public delegate void PushVarDelegate(IntPtr l, object o);
 
@@ -583,7 +589,6 @@ namespace SLua
 
         public void bindUnity()
         {
-
             if (!openedSluaLib)
                 openSluaLib();
 
@@ -593,6 +598,9 @@ namespace SLua
 
         public IEnumerator bindUnity(Action<int> _tick, Action complete)
         {
+            if (!openedSluaLib)
+                openSluaLib();
+
             yield return LuaSvr.doBind(L, _tick, complete);
             LuaValueType.reg(L);
         }
@@ -764,8 +772,13 @@ return index
 			LuaDLL.lua_pushcfunction(L, warn);
 			LuaDLL.lua_setglobal(L, "warn");
 
-            LuaDLL.lua_pushcfunction(L, pcall);
-            LuaDLL.lua_setglobal(L, "pcall");
+//            LuaDLL.lua_pushcfunction(L, pcall);
+//            LuaDLL.lua_setglobal(L, "pcall");
+
+#if LUA_DEBUG
+            LuaDLL.lua_pushcfunction(L, getStringFromMD5); 
+            LuaDLL.lua_setglobal(L, "getStringFromMD5");
+#endif
 
             pushcsfunction(L, import);
             LuaDLL.lua_setglobal(L, "import");
@@ -987,20 +1000,19 @@ return dumpstack
             }
         }
 
-        [MonoPInvokeCallbackAttribute(typeof(LuaCSFunction))]
-        internal static int pcall(IntPtr L)
-        {
-            int status;
-            if (LuaDLL.lua_type(L, 1) != LuaTypes.LUA_TFUNCTION)
-            {
-                return LuaObject.error(L, "arg 1 expect function");
-            }
-            LuaDLL.luaL_checktype(L, 1, LuaTypes.LUA_TFUNCTION);
-            status = LuaDLL.lua_pcall(L, LuaDLL.lua_gettop(L) - 1, LuaDLL.LUA_MULTRET, 0);
-            LuaDLL.lua_pushboolean(L, (status == 0));
-            LuaDLL.lua_insert(L, 1);
-            return LuaDLL.lua_gettop(L);  /* return status + all results */
-        }
+//        [MonoPInvokeCallbackAttribute(typeof(LuaCSFunction))]
+//        internal static int pcall(IntPtr L)
+//        {
+//            int status;
+//            if (LuaDLL.lua_type(L, 1) != LuaTypes.LUA_TFUNCTION)
+//            {
+//                return LuaObject.error(L, "arg 1 expect function");
+//            }
+//            status = LuaDLL.lua_pcall(L, LuaDLL.lua_gettop(L) - 1, LuaDLL.LUA_MULTRET, 0);
+//            LuaDLL.lua_pushboolean(L, (status == 0));
+//            LuaDLL.lua_insert(L, 1);
+//            return LuaDLL.lua_gettop(L);  /* return status + all results */
+//        }
 
         internal static void pcall(IntPtr l, LuaCSFunction f)
         {
@@ -1161,16 +1173,48 @@ return dumpstack
 			LuaDLL.lua_pushcclosure(L, function, 0);
 			LuaDLL.lua_call(L, 1, 1);
 		}
+#if LUA_DEBUG
+        [MonoPInvokeCallbackAttribute(typeof(LuaCSFunction))]
+        static public int getStringFromMD5(IntPtr L) {
+			string str = LuaDLL.lua_tostring(L, -1);
+            string destString = "";
 
-		public object doString(string str)
+            if (debugStringMap.ContainsKey(str))
+            {
+                destString = debugStringMap[str];
+            }
+            LuaObject.pushValue(L, destString);
+            return 1;
+        }
+
+        static public string getStringMD5(string str)
+        {
+            MD5CryptoServiceProvider md5 = new MD5CryptoServiceProvider();
+            byte[] bytes = System.Text.Encoding.UTF8.GetBytes(str);
+            byte[] md5Data = md5.ComputeHash(bytes, 0, bytes.Length);
+            md5.Clear();
+
+            string destString = "";
+            for (int i = 0; i < md5Data.Length; i++)
+            {
+                destString += System.Convert.ToString(md5Data[i], 16).PadLeft(2, '0');
+            }
+            destString = destString.PadLeft(32, '0');
+            return destString;
+        }
+#endif
+
+        public object doString(string str)
 		{
-			byte[] bytes = Encoding.UTF8.GetBytes(str);
-
-			object obj;
-			if (doBuffer(bytes, "temp buffer", out obj))
-				return obj;
-			return null; ;
-		}
+#if LUA_DEBUG
+            //get str's md5 string
+            string stringMd5 = getStringMD5(str);
+            debugStringMap.Add(stringMd5, str);
+            return doString(str, stringMd5);
+#else
+            return doString(str, "temp buffer");
+#endif
+        }
 
 		public object doString(string str, string chunkname)
 		{
@@ -1187,9 +1231,15 @@ return dumpstack
 		{
             LuaState state = LuaState.get(L);
 			string fileName = LuaDLL.lua_tostring(L, 1);
-			byte[] bytes = state.loadFile(fileName);
+			string absoluteFn = "";
+			byte[] bytes = state.loadFile(fileName, ref absoluteFn);
 			if (bytes != null)
 			{
+#if LUA_DEBUG	
+				if (absoluteFn != "") {
+					fileName = absoluteFn;
+				}
+#endif
 				if (LuaDLL.luaL_loadbuffer(L, bytes, bytes.Length, "@" + fileName) == 0)
 				{
 					LuaObject.pushValue(L, true);
@@ -1209,13 +1259,19 @@ return dumpstack
 
 		public object doFile(string fn)
 		{
-			byte[] bytes = loadFile(fn);
+			string absoluteFn = "";
+			byte[] bytes = loadFile(fn , ref absoluteFn);
 			if (bytes == null)
 			{
 				Logger.LogError(string.Format("Can't find {0}", fn));
 				return null;
 			}
 
+#if LUA_DEBUG	
+			if (absoluteFn != "") {
+				fn = absoluteFn;
+			}
+#endif
 			object obj;
 			if (doBuffer(bytes, "@" + fn, out obj))
 				return obj;
@@ -1272,12 +1328,12 @@ return dumpstack
 		}
 #endif
 
-		internal byte[] loadFile (string fn)
+		internal byte[] loadFile (string fn, ref string absoluteFn)
 		{
 			try {
 				byte[] bytes;
 				if (loaderDelegate != null)
-					bytes = loaderDelegate (fn);
+					bytes = loaderDelegate (fn, ref absoluteFn);
 				else {
 #if !SLUA_STANDALONE
 					fn = fn.Replace (".", "/");
@@ -1298,6 +1354,17 @@ return dumpstack
 						asset = loadAsset("Assets/Slua/jit/jitgc64/" + fn + ".bytes");
 					}
 
+#if LUA_DEBUG
+					//get asset's absolute path
+					string assetFn = UnityEditor.AssetDatabase.GetAssetPath(asset);
+					if (assetFn != ""){
+						//find out asset path, remove assetFn's first "Asset/"
+						int idx = assetFn.IndexOf("/");
+						if(idx > 0){
+							absoluteFn = Application.dataPath + assetFn.Substring(idx);
+						}
+					}
+#endif
 #else
 					asset = (TextAsset)Resources.Load(fn);
 #endif

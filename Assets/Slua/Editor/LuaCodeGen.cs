@@ -114,7 +114,9 @@ namespace SLua
 #if UNITY_2017_2_OR_NEWER
         public static string[] unityModule = new string[] { "UnityEngine","UnityEngine.CoreModule","UnityEngine.UIModule","UnityEngine.TextRenderingModule","UnityEngine.TextRenderingModule",
                 "UnityEngine.UnityWebRequestWWWModule","UnityEngine.Physics2DModule","UnityEngine.AnimationModule","UnityEngine.TextRenderingModule","UnityEngine.IMGUIModule","UnityEngine.UnityWebRequestModule",
-            "UnityEngine.PhysicsModule", "UnityEngine.UI" };
+            "UnityEngine.PhysicsModule", "UnityEngine.UI", "UnityEngine.AudioModule" };
+#else
+        public static string[] unityModule = null;
 #endif
 
         [MenuItem("SLua/All/Make")]
@@ -890,8 +892,9 @@ namespace SLua
 			if (!t.IsGenericTypeDefinition && (!IsObsolete(t) && t != typeof(YieldInstruction) && t != typeof(Coroutine))
 			    || (t.BaseType != null && t.BaseType == typeof(System.MulticastDelegate)))
 			{
-
-				if (t.IsNested && t.DeclaringType.IsPublic == false)
+				if (t.IsNested
+					&& ((!t.DeclaringType.IsNested && t.DeclaringType.IsPublic == false)
+					|| (t.DeclaringType.IsNested && t.DeclaringType.IsNestedPublic == false)))
 					return false;
 
 				if (t.IsEnum)
@@ -1200,7 +1203,7 @@ namespace SLua
         {
             if (t.IsEnum)
             {
-                return string.Format("checkEnum(l,{2}{0},out {1});", n, v, prefix);
+                return string.Format("{0} = ({1})LuaDLL.luaL_checkinteger(l, {2});", v, TypeDecl(t), n);
             }
             else if (t.BaseType == typeof(System.MulticastDelegate))
             {
@@ -1359,7 +1362,8 @@ namespace SLua
 				    && !DontExport(mi)
 				    && !funcname.Contains(fn)
 				    && isUsefullMethod(mi)
-				    && !MemberInFilter(t, mi))
+				    && !MemberInFilter(t, mi)
+					&& !ContainUnsafe(mi))
 				{
 					WriteFunctionDec(file, fn);
 					WriteFunctionImpl(file, mi, t, bf);
@@ -1389,7 +1393,7 @@ namespace SLua
 		
 		bool MemberInFilter(Type t, MemberInfo mi)
 		{
-			return memberFilter.Contains(t.Name + "." + mi.Name) || memberFilter.Contains("*." + mi.Name);
+            return memberFilter.Contains(t.Name + "." + mi.Name) || memberFilter.Contains("*." + mi.Name);
 		}
 		
 		bool IsObsolete(MemberInfo t)
@@ -1787,20 +1791,42 @@ namespace SLua
 		void WriteTry(StreamWriter file)
 		{
 			Write(file, "try {");
+			Write(file, "#if DEBUG");
+			Write(file, "var method = System.Reflection.MethodBase.GetCurrentMethod();");
+			Write(file, "string methodName = GetMethodName(method);");
+			Write(file, "#if UNITY_5_5_OR_NEWER");
+			Write(file, "UnityEngine.Profiling.Profiler.BeginSample(methodName);");
+			Write(file, "#else");
+			Write(file, "Profiler.BeginSample(methodName);");
+			Write(file, "#endif");
+			Write(file, "#endif");
 		}
-		
+
 		void WriteCatchExecption(StreamWriter file)
 		{
 			Write(file, "}");
 			Write(file, "catch(Exception e) {");
 			Write(file, "return error(l,e);");
 			Write(file, "}");
+			WriteFinaly(file);
 		}
-		
+		void WriteFinaly(StreamWriter file)
+		{
+			Write(file, "#if DEBUG");
+			Write(file, "finally {");
+			Write(file, "#if UNITY_5_5_OR_NEWER");
+			Write(file, "UnityEngine.Profiling.Profiler.EndSample();");
+			Write(file, "#else");
+			Write(file, "Profiler.EndSample();");
+			Write(file, "#endif");
+			Write(file, "}");
+			Write(file, "#endif");
+		}
+
 		void WriteCheckType(StreamWriter file, Type t, int n, string v = "v", string nprefix = "")
 		{
 			if (t.IsEnum)
-				Write(file, "checkEnum(l,{2}{0},out {1});", n, v, nprefix);
+				Write(file, "{0} = ({1})LuaDLL.luaL_checkinteger(l, {2});", v, TypeDecl(t), n);
 			else if (t.BaseType == typeof(System.MulticastDelegate))
 				Write(file, "int op=checkDelegate(l,{2}{0},out {1});", n, v, nprefix);
 			else if (IsValueType(t))
@@ -1914,7 +1940,7 @@ namespace SLua
 					{
 						ParameterInfo p = pars[k];
 						bool hasParams = p.IsDefined(typeof(ParamArrayAttribute), false);
-						CheckArgument(file, p.ParameterType, k, 2, p.IsOut, hasParams);
+                        CheckArgument(file, p.ParameterType, k, 2, IsOutArg(p), hasParams);
 					}
 					Write(file, "o=new {0}({1});", TypeDecl(t), FuncCall(ci));
 					WriteOk(file);
@@ -2209,7 +2235,9 @@ namespace SLua
 					if (cons[n].MemberType == MemberTypes.Method)
 					{
 						MethodInfo mi = cons[n] as MethodInfo;
-
+						if (ContainUnsafe(mi)) {
+							continue;
+						}
 						if (mi.IsDefined (typeof(LuaOverrideAttribute), false)) {
 							if (overridedMethods == null)
 								overridedMethods = new Dictionary<string,MethodInfo> ();
@@ -2332,7 +2360,7 @@ namespace SLua
 				}
 				
 				bool hasParams = p.IsDefined(typeof(ParamArrayAttribute), false);
-				CheckArgument(file, p.ParameterType, n, argIndex, p.IsOut, hasParams);
+                CheckArgument(file, p.ParameterType, n, argIndex, IsOutArg(p), hasParams);
 			}
 			
 			string ret = "";
@@ -2473,6 +2501,10 @@ namespace SLua
 			
 			if (fmt.EndsWith("{")) indent++;
 		}
+
+        bool IsOutArg(ParameterInfo p) {
+            return p.IsOut && !p.IsDefined(typeof(System.Runtime.InteropServices.OutAttribute),false);
+        }
 		
 		private void CheckArgument(StreamWriter file, Type t, int n, int argstart, bool isout, bool isparams)
 		{
@@ -2481,7 +2513,7 @@ namespace SLua
 			if (!isout)
 			{
 				if (t.IsEnum)
-					Write(file, "checkEnum(l,{0},out a{1});", n + argstart, n + 1);
+					Write(file, "a{0} = ({1})LuaDLL.luaL_checkinteger(l, {2});", n + 1, TypeDecl(t), n + argstart);
 				else if (t.BaseType == typeof(System.MulticastDelegate))
 				{
 					tryMake(t);
@@ -2509,14 +2541,12 @@ namespace SLua
 
 		bool IsValueType(Type t)
 		{
+            if (t.IsByRef) t = t.GetElementType();
             return t.BaseType == typeof(ValueType) && !IsBaseType(t);
 		}
 
 		bool IsBaseType(Type t)
 		{
-			if (t.IsByRef) {
-				t = t.GetElementType();
-			}
 			return t.IsPrimitive || LuaObject.isImplByLua(t);
 		}
 		

@@ -48,7 +48,7 @@ public class Game : MonoBehaviour
         }
     }
 
-    protected byte[] loadFileWithSuffix(string strFile)
+    protected byte[] loadFileWithSuffix(string strFile, ref string absoluteFn)
     {
         if (string.IsNullOrEmpty(strFile))
         {
@@ -82,7 +82,7 @@ public class Game : MonoBehaviour
         return aContents;
     }
 
-    protected byte[] loadLuaWithAb(string strFile)
+    protected byte[] loadLuaWithAb(string strFile, ref string absoluteFn)
     {
         string ext = LGameConfig.GetInstance().isEncrypt ? ".bytes" : ".txt";
         TextAsset asset = null;
